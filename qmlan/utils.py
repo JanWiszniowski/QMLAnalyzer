@@ -170,9 +170,11 @@ def this_magnitude(magnitude_object, **kwargs):
     method_id = kwargs.get('method_id')
     if magnitude_type is not None and magnitude_object.magnitude_type != magnitude_type:
         return False
-    if method_id is not None and magnitude_object.method_id != method_id:
-        return False
-    return True
+    if method_id is None:
+        return True
+    if magnitude_object.method_id is None:
+        return method_id == 'none'
+    return magnitude_object.method_id.id == method_id
 
 
 def this_sta_magnitude(magnitude_object, **kwargs):
@@ -182,11 +184,9 @@ def this_sta_magnitude(magnitude_object, **kwargs):
         return False
     if method_id is None:
         return True
-    if magnitude_object.method_id.text == method_id:
-        return True
-    if method_id == 'none':
-        return magnitude_object.method_id is None
-    return False
+    if magnitude_object.method_id is None:
+        return method_id == 'none'
+    return magnitude_object.method_id.id == method_id
 
 
 def get_magnitude(event, **kwarg):
