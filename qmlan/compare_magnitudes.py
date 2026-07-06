@@ -3,6 +3,7 @@ from obspy.core.event import read_events
 from qmlan.utils import get_magnitude
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
 
 
 def compare_magnitude(catalog, type1, type2, method_id1=None, method_id2=None):
@@ -15,6 +16,24 @@ def compare_magnitude(catalog, type1, type2, method_id1=None, method_id2=None):
         magnitudes2.append(magnitude2)
     return magnitudes1, magnitudes2
 
+def  ML2Mw(ML, method='Grunthal'):
+    ML2 = ML ** 2
+    if method == 'Grunthal':
+        Mw = 0.53 + 0.646 * ML + 0.0376 * ML2 # Grunthal 2009
+    else:
+        Mw = 1.2 + 0.28 * ML + 0.06 * ML2
+    return Mw
+
+
+def func (x, a, b,c):
+    return a + b * x + c * x ** 2
+
+def fit(xx, yy):
+    params, pcov = curve_fit(func, xx, yy)
+    a, b, c = params
+    print(f"Fit parameters: {params}")
+    print(f"Fit pcov: {pcov}")
+    return a, b, c
 
 def main():
     parser = argparse.ArgumentParser(
@@ -28,6 +47,8 @@ def main():
     parser.add_argument('-4', '--method2', metavar='', help='method of second magnitudes')
     parser.add_argument('-i', '--input_format', default='QUAKEML', help='Input catalog format')
     parser.add_argument('-m', '--marker_size', default='3', help='Marker size')
+    parser.add_argument('-e', '--error_limit', default='0.4', help='Error limit')
+    parser.add_argument('-x', '--max_correct', default='3.2', help='Maximum corrected amplitudes')
     args = parser.parse_args()
     print(f"Start reading {args.catalog}")
     catalog = read_events(args.catalog, format=args.input_format)
@@ -42,6 +63,8 @@ def main():
             y.append(magnitude2.mag)
     print(f"Found {len(x)} magnitude pairs")
     marker_size = int(args.marker_size)
+    error_limit = float(args.error_limit)
+    max_correct = float(args.max_correct)
     fig1, ax1 = plt.subplots()
     if args.type1 == 'E':
         ax1.semilogx(x, y, 'r.', markersize=marker_size)
@@ -49,16 +72,25 @@ def main():
         ax1.semilogy(x, y, 'r.', markersize=marker_size)
     else:
         min_mag, max_mag = min(x), max(x)
-        ax1.plot([min_mag, max_mag], [min_mag, max_mag], 'k:', linewidth=0.5)
-        ax1.plot(x, y, 'r.', markersize=marker_size)
+        ax1.plot([min_mag, max_mag], [min_mag, max_mag], 'k:', linewidth=0.5, label=r"$Mw=ML$")
+        ax1.plot(x, y, 'r.', markersize=marker_size, label="Estimated magnitudes")
+        xx = np.sort(np.array(x))
+        # yy = ML2Mw(xx)
+        # ax1.plot(xx, yy, 'b--', linewidth=0.5)
+        xxx = np.array(x)
+        yyy = np.array(y)
+        pars = fit(xxx, yyy)
+        ax1.plot(xx, func(xx, *pars), 'g--', linewidth=1,
+                 label=r"$Mw={:.2}+{:.2}\cdot ML+{:.2}\cdot ML^2$".format(pars[0], pars[1], pars[1])
+                 )
         bx = []
         by = []
         e = []
         for magnitude1, magnitude2, event in zip(magnitudes1, magnitudes2, catalog.events):
             if magnitude1 is not None and magnitude2 is not None:
-                if magnitude2.mag < 2.5:
+                if magnitude2.mag < max_correct:
                     continue
-                if magnitude2.mag - magnitude1.mag < 1:
+                if magnitude2.mag - func(magnitude1.mag, *pars) < error_limit:
                     continue
                 bx.append(magnitude1.mag)
                 by.append(magnitude2.mag)
@@ -67,7 +99,8 @@ def main():
         if args.output:
             catalog.events = e
             catalog.write(args.output, format=args.input_format)
-        ax1.plot(bx, by, 'b+', markersize=marker_size + 2)
+        ax1.plot(bx, by, 'b+', markersize=marker_size + 2, label="Outlier Mw values")
+    ax1.legend()
     ax1.set_xlabel(args.type1 if args.method1 is None else f"{args.type1} ({args.method1})")
     ax1.set_ylabel(args.type2 if args.method2 is None else f"{args.type2} ({args.method2})")
     fig2, ax2 = plt.subplots()
@@ -92,6 +125,19 @@ def main():
     ax3.set_xlabel(args.type2 if args.method2 is None else f"{args.type2} ({args.method2})")
     ax3.set_ylabel("No. events in 0.1 bins")
     ax3.legend()
+    # Tests
+    fig4, ax4 = plt.subplots()
+    mag = [m.mag for m,m0 in zip(magnitudes2, magnitudes1)
+           if m is not None and (m.mag < max_correct or m0 is None or m.mag < ML2Mw(m0.mag) + error_limit)]
+    min_mag, max_mag = min(mag), max(mag)
+    pre_bins = np.arange(np.floor(min_mag - 0.1), np.ceil(max_mag + 0.2), 0.1)
+    counts, bins = np.histogram(mag, bins=pre_bins)
+    ax4.semilogy(bins[:-1], counts, 'bo', markersize=marker_size, label="No. events")
+    ax4.semilogy(bins[:-1], np.cumsum(counts[::-1])[::-1], 'b-', label="Cumulated no. events")
+    ax4.set_xlabel(args.type2 if args.method2 is None else f"{args.type2} ({args.method2})")
+    ax4.set_ylabel("No. events in 0.1 bins")
+    ax4.legend()
+    # Tests
     plt.show(block=True)
 
 
