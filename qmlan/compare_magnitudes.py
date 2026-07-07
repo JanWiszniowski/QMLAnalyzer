@@ -111,11 +111,11 @@ def main():
         ax1.set_ylabel(args.type2 if args.method2 is None else f"{args.type2} ({args.method2})")
         xxx = np.log10(np.array(x))
         yyy = np.array(y)
-        # result = stats.linregress(xxx, yyy, 'two-sided')
-        # xx = np.sort(np.array(x))
-        # plt.semilogx(xx, result.intercept + result.slope * np.log10(xx), 'g--',
-        #              label=r'$Mw={:.2}+{:.2} \cdot {}{} [J]$'.format(result.intercept, result.slope,
-        #                                                        r"log_{10}", type1))
+        result = stats.linregress(xxx, yyy, 'two-sided')
+        xx = np.sort(np.array(x))
+        plt.semilogx(xx, result.intercept + result.slope * np.log10(xx), 'g--',
+                     label=r'$Mw={:.2}+{:.2} \cdot {}{} [J]$'.format(result.intercept, result.slope,
+                                                               r"log_{10}", type1))
         pars = fit2(yyy, xxx)
         yy = np.sort(yyy)
         # ax1.semilogx(np.power(10.0, func2(yy, *pars)), yy, 'b--', linewidth=1,
